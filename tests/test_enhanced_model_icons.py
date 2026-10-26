@@ -66,7 +66,7 @@ def test_clamp_size(mod, raw, expected):
 
 def test_valve_size_is_clamped_in_config(mod):
     js = fragment(mod, default_size=50)
-    assert '"size": 3.0' in js
+    assert '"msize": 3.0' in js and '"hsize": 1.0' in js
 
 
 def test_every_shape_has_a_name(mod):
@@ -86,3 +86,11 @@ def test_loader_js_parses(mod, tmp_path):
         ["node", "--check", str(out)], capture_output=True, text=True
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_separate_hero_size_and_hero_not_gated_on_image_url(mod):
+    js = fragment(mod, default_hero_size=2)
+    assert '"hsize": 2.0' in js
+    assert "owui-model-icon-hero-size" in js
+    assert "/models/model/profile/image" not in js.split("function markHero")[1].split("}")[0]
+    assert "data-emi-hs" in mod.EMI_CSS and "data-emi-ms" in mod.EMI_CSS

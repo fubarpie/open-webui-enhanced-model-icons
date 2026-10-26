@@ -4,7 +4,7 @@ description: Enhancements for the model icon in Open WebUI. Adds settings under 
 author: fubarpie
 author_url: https://github.com/fubarpie/open-webui-enhanced-model-icons
 funding_url:
-version: 0.1.0
+version: 0.2.0
 license: MIT
 required_open_webui_version: 0.11.0
 """
@@ -420,20 +420,14 @@ def clamp_size(value: Any) -> float:
 
 
 EMI_CSS = r"""
-:root{--emi-s:1;--emi-mb:1.75rem;--emi-hb:2.25rem}
-@media (min-width:640px){:root{--emi-hb:2.5rem}}
-html[data-emi] img.assistant-message-profile-image,
-html[data-emi] img[data-emi-hero]{
-  width:calc(var(--emi-mb) * var(--emi-s) * var(--emi-wm,1))!important;
-  height:calc(var(--emi-mb) * var(--emi-s))!important;
-  border-radius:var(--emi-r,1rem)!important;
-  object-fit:var(--emi-fit,cover)!important;
-  clip-path:var(--emi-clip,none)
-}
-html[data-emi] img[data-emi-hero]{
-  width:calc(var(--emi-hb) * var(--emi-s) * var(--emi-wm,1))!important;
-  height:calc(var(--emi-hb) * var(--emi-s))!important
-}
+html[data-emi-ms] img.assistant-message-profile-image{zoom:var(--emi-ms,1)}
+html[data-emi-hs] img[data-emi-hero]{zoom:var(--emi-hs,1)}
+html[data-emi-ar] img.assistant-message-profile-image,
+html[data-emi-ar] img[data-emi-hero]{width:auto!important;aspect-ratio:var(--emi-wm)!important;object-fit:cover}
+html[data-emi-shape] img.assistant-message-profile-image,
+html[data-emi-shape] img[data-emi-hero]{border-radius:var(--emi-r)!important;clip-path:var(--emi-clip,none)!important}
+html[data-emi-fit] img.assistant-message-profile-image,
+html[data-emi-fit] img[data-emi-hero]{object-fit:var(--emi-fit)!important}
 .emi-heading{margin:.85rem 0 .5rem;font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--color-gray-400,#9ca3af)}
 .emi-select{width:fit-content;max-width:14rem;padding:0 .5rem;border-radius:.125rem;background:transparent;font-size:.75rem;text-align:right;cursor:pointer;outline:none}
 .dark .emi-select{background:var(--color-gray-900,#171717)}
@@ -454,7 +448,8 @@ LOADER_SCRIPT = r"""
   var CSS = __CSS__;
   var ROOT = document.documentElement;
   var KEYS = {
-    size: 'owui-model-icon-size',
+    msize: 'owui-model-icon-size',
+    hsize: 'owui-model-icon-hero-size',
     shape: 'owui-model-icon-shape',
     fit: 'owui-model-icon-fit'
   };
@@ -476,9 +471,9 @@ LOADER_SCRIPT = r"""
   }
 
   // ---- state -----------------------------------------------------------
-  function size() {
-    var stored = clamp(read(KEYS.size));
-    return stored === null ? CFG.size : stored;
+  function size(key, fallback) {
+    var stored = clamp(read(key));
+    return stored === null ? fallback : stored;
   }
   function choice(group, key) {
     var value = read(key);
@@ -489,45 +484,79 @@ LOADER_SCRIPT = r"""
     return value === 'default' ? fallback : value;
   }
 
-  // Writes CSS variables on <html>. Everything is skipped (attribute removed)
-  // when all settings are at their defaults, so a stock install is untouched.
+  function flag(name, on) {
+    if (on) ROOT.setAttribute(name, '1'); else ROOT.removeAttribute(name);
+  }
+  function setVar(name, value) {
+    if (value === null || value === undefined) ROOT.style.removeProperty(name);
+    else ROOT.style.setProperty(name, String(value));
+  }
+
+  // Each feature has its own attribute on <html> that switches its CSS on, so
+  // a stock install (everything at default) is completely untouched.
   function apply() {
-    var s = size();
+    var ms = size(KEYS.msize, CFG.msize);
+    var hs = size(KEYS.hsize, CFG.hsize);
     var shape = effective('shapes', KEYS.shape, CFG.shape);
     var fit = effective('fits', KEYS.fit, CFG.fit);
     var def = CFG.shapes[shape] || {};
-    var props = {
-      '--emi-s': String(s),
-      '--emi-r': def.r || null,
-      '--emi-wm': def.wm ? String(def.wm) : null,
-      '--emi-clip': def.clip || null,
-      '--emi-fit': fit === 'default' ? null : fit
-    };
-    Object.keys(props).forEach(function (name) {
-      if (props[name] === null) ROOT.style.removeProperty(name);
-      else ROOT.style.setProperty(name, props[name]);
-    });
-    var active = s !== 1 || shape !== 'default' || fit !== 'default';
-    if (active) ROOT.setAttribute('data-emi', '1');
-    else ROOT.removeAttribute('data-emi');
+    setVar('--emi-ms', ms);
+    setVar('--emi-hs', hs);
+    setVar('--emi-r', def.r || null);
+    setVar('--emi-wm', def.wm || null);
+    setVar('--emi-clip', def.clip || null);
+    setVar('--emi-fit', fit === 'default' ? null : fit);
+    flag('data-emi-ms', ms !== 1);
+    flag('data-emi-hs', hs !== 1);
+    flag('data-emi-shape', shape !== 'default');
+    flag('data-emi-ar', !!def.wm);
+    flag('data-emi-fit', fit !== 'default');
   }
 
   // ---- marking the empty-chat icon ------------------------------------
   // Open WebUI gives the in-reply icon a stable class
   // (assistant-message-profile-image) but the icon on the empty-chat screen has
-  // no class or id. It is the model image inside the "-space-x-4" strip that
-  // sits next to the model name <h2>, so find it structurally. Model pickers
-  // and the sidebar use the same image URL but never match this shape.
+  // no class or id. It sits in the "-space-x-4" strip next to the model name
+  // heading. The image URL is NOT checked: models without a custom picture use
+  // a static/data URL instead of /models/model/profile/image.
+  var SKIP = '#sidebar, nav, [role="menu"], [role="listbox"], [role="dialog"], .modal, [id^="message-"], #message-input-container';
+  function hasHeading(strip) {
+    var el = strip;
+    for (var depth = 0; el && depth < 4; depth++, el = el.parentElement) {
+      for (var c = el.parentElement ? el.parentElement.children : [], i = 0; i < c.length; i++) {
+        if (c[i] !== el && (c[i].tagName === 'H1' || c[i].tagName === 'H2' || c[i].tagName === 'H3')) return true;
+      }
+    }
+    return false;
+  }
   function markHero() {
-    var imgs = document.querySelectorAll('img[src*="/models/model/profile/image"]:not(.assistant-message-profile-image)');
+    var imgs = document.querySelectorAll('.-space-x-4 img:not(.assistant-message-profile-image):not([data-emi-hero])');
     for (var i = 0; i < imgs.length; i++) {
       var img = imgs[i];
-      if (img.hasAttribute('data-emi-hero')) continue;
-      var strip = img.closest('.-space-x-4');
-      var row = strip && strip.parentElement && strip.parentElement.parentElement;
-      if (row && row.querySelector(':scope > h2')) img.setAttribute('data-emi-hero', '1');
+      if (img.closest(SKIP)) continue;
+      if (hasHeading(img.closest('.-space-x-4'))) img.setAttribute('data-emi-hero', '1');
     }
   }
+
+  // Console helper: window.__owuiEnhancedModelIcons.dump() on the empty-chat
+  // screen prints what the plugin sees, to debug a changed Open WebUI layout.
+  window.__owuiEnhancedModelIcons = {
+    dump: function () {
+      var out = [];
+      document.querySelectorAll('img').forEach(function (img) {
+        if (img.closest('#sidebar, nav')) return;
+        var box = img.parentElement && img.parentElement.parentElement && img.parentElement.parentElement.parentElement;
+        out.push({
+          marked: img.hasAttribute('data-emi-hero') || img.classList.contains('assistant-message-profile-image'),
+          src: (img.getAttribute('src') || '').slice(0, 80),
+          cls: img.className,
+          html: box ? box.outerHTML.replace(/src="[^"]{80,}"/g, 'src="..."').slice(0, 600) : ''
+        });
+      });
+      console.log(JSON.stringify(out, null, 1));
+      return out;
+    }
+  };
 
   // ---- settings UI -----------------------------------------------------
   function label(group, value, fallback) {
@@ -570,8 +599,7 @@ LOADER_SCRIPT = r"""
     return block;
   }
 
-  function sliderRow(at) {
-    var id = 'emi-size';
+  function sliderRow(at, id, title, note, key, fallback) {
     function fmt(v) { return v.toFixed(1) + '\u00d7'; }
     var block = document.createElement('div');
     block.id = id;
@@ -581,7 +609,7 @@ LOADER_SCRIPT = r"""
     name.id = id + '-label';
     name.setAttribute('for', id + '-input');
     name.className = at.nameClass || 'min-w-0 text-xs text-gray-600 dark:text-gray-400';
-    name.textContent = 'Model Icon Size';
+    name.textContent = title;
     var right = document.createElement('div');
     right.className = 'emi-range-row';
     var input = document.createElement('input');
@@ -591,26 +619,27 @@ LOADER_SCRIPT = r"""
     input.min = String(CFG.sizeMin);
     input.max = String(CFG.sizeMax);
     input.step = '0.1';
-    input.value = String(size());
+    input.value = String(size(key, fallback));
     var val = document.createElement('span');
     val.className = 'emi-range-v';
-    val.textContent = fmt(size());
+    val.textContent = fmt(size(key, fallback));
     var reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'emi-range-r';
     reset.textContent = 'Reset';
-    reset.hidden = read(KEYS.size) === null;
+    reset.hidden = read(key) === null;
     input.addEventListener('input', function () {
       var v = clamp(input.value);
-      write(KEYS.size, String(v));
+      write(key, String(v));
       val.textContent = fmt(v);
       reset.hidden = false;
       apply();
     });
     reset.addEventListener('click', function () {
-      drop(KEYS.size);
-      input.value = String(size());
-      val.textContent = fmt(size());
+      drop(key);
+      var v = size(key, fallback);
+      input.value = String(v);
+      val.textContent = fmt(v);
       reset.hidden = true;
       apply();
     });
@@ -621,7 +650,7 @@ LOADER_SCRIPT = r"""
     line.appendChild(right);
     var p = document.createElement('p');
     p.className = 'mt-1.5 text-[0.6875rem] text-gray-400 dark:text-gray-600';
-    p.textContent = 'Size of the model icon on the empty-chat screen and beside each model reply. Saved in this browser.';
+    p.textContent = note;
     block.appendChild(line);
     block.appendChild(p);
     return block;
@@ -642,12 +671,17 @@ LOADER_SCRIPT = r"""
     head.className = 'emi-heading';
     head.textContent = 'Model icon';
     box.appendChild(head);
-    box.appendChild(sliderRow(at));
+    box.appendChild(sliderRow(at, 'emi-msize', 'Chat Message Icon Size',
+      'Size of the model icon beside each model reply. Saved in this browser.',
+      KEYS.msize, CFG.msize));
+    box.appendChild(sliderRow(at, 'emi-hsize', 'Start Screen Icon Size',
+      'Size of the model icon shown on the empty chat before you start talking. Saved in this browser.',
+      KEYS.hsize, CFG.hsize));
     box.appendChild(selectRow(at, 'emi-shape', 'Model Icon Shape',
-      'Shape of the crop around the model icon. Default keeps Open WebUI\u2019s own rounded square.',
+      'Shape of both model icons. Default keeps Open WebUI\u2019s own rounded square.',
       'shapes', KEYS.shape, CFG.shape));
     box.appendChild(selectRow(at, 'emi-fit', 'Model Icon Fit',
-      'Crop to fill trims the picture to the shape; Show whole image fits all of it inside, which can leave empty margins.',
+      'Crop to fill trims the picture to the shape; Show whole image fits all of it inside, leaving margins. Only visible when the picture and the shape have different proportions (try Portrait or Wide).',
       'fits', KEYS.fit, CFG.fit));
     wrapper.parentElement.insertBefore(box, wrapper.nextSibling);
   }
@@ -693,7 +727,11 @@ class Event:
     class Valves(BaseModel):
         default_size: float = Field(
             default=1.0,
-            description="Default model icon size multiplier (0.5 to 3.0, clamped) for users who have not moved the slider in Settings > Interface. 1.0 keeps Open WebUI's size.",
+            description="Default size multiplier (0.5 to 3.0, clamped) of the icon beside chat messages, for users who have not moved the slider in Settings > Interface. 1.0 keeps Open WebUI's size.",
+        )
+        default_hero_size: float = Field(
+            default=1.0,
+            description="Default size multiplier (0.5 to 3.0, clamped) of the icon on the empty-chat start screen. 1.0 keeps Open WebUI's size.",
         )
         default_shape: SHAPE_LITERAL = Field(
             default="default",
@@ -726,7 +764,8 @@ class Event:
             return cached[1]
         config = _json.dumps(
             {
-                "size": clamp_size(valves.default_size),
+                "msize": clamp_size(valves.default_size),
+                "hsize": clamp_size(valves.default_hero_size),
                 "sizeMin": SIZE_MIN,
                 "sizeMax": SIZE_MAX,
                 "shape": valves.default_shape,

@@ -17,11 +17,12 @@ Requires Open WebUI 0.11.0 or newer (same as Indicator Changer).
 
 | Setting | What it does |
 |---|---|
-| **Model Icon Size** | 0.5x to 3x slider. Applies to the icon on the empty-chat screen and the icon beside every model reply. Per-browser, with a Reset link. |
+| **Chat Message Icon Size** | 0.5x to 3x slider for the icon beside every model reply. Per-browser, with a Reset link. |
+| **Start Screen Icon Size** | Separate 0.5x to 3x slider for the icon on the empty-chat screen. |
 | **Model Icon Shape** | Default (Open WebUI's rounded square), Circle, Rounded Square, Squircle, Square, Portrait 3:4, Landscape 4:3, Wide 16:9, Hexagon. |
 | **Model Icon Fit** | *Crop to fill* trims the picture to the shape; *Show whole image* fits all of it inside the box. |
 
-Admin valves set what "Default" means for users who haven't chosen: `default_size`, `default_shape`, `default_fit`.
+Admin valves set what "Default" means for users who haven't chosen: `default_size` (message icon), `default_hero_size`, `default_shape`, `default_fit`.
 
 With every setting at its default the plugin changes nothing on the page.
 
